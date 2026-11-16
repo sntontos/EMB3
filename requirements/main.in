@@ -1,0 +1,16 @@
+# Environment "main": GIN (PyTorch Geometric), WL subtree kernel (GraKeL),
+# dataset download, and all evaluation (classification, clustering, stability, plots).
+# Python 3.12.
+torch
+torch_geometric
+grakel
+scikit-learn
+scipy
+numpy
+pandas
+networkx
+umap-learn
+matplotlib
+pyyaml
+psutil
+tqdm

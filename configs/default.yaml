@@ -1,0 +1,58 @@
+# Experiment protocol for EMB3. Values come from the assignment (Class_Projects_2026-27.pdf,
+# sections 0 and 4) unless a comment says otherwise. Hyperparameter grids are added per method.
+
+paths:
+  data: data          # downloaded datasets and cached embeddings (not committed)
+  results: results    # tables, figures and the system record (committed)
+  splits: splits      # cross-validation splits (committed)
+
+tudataset_url: https://www.chrsmrrs.com/graphkerneldatasets
+
+datasets:
+  # sha256 is the checksum of the downloaded archive; preparation stops if it differs.
+  ENZYMES:
+    size: small
+    node_labels: native   # the dataset ships with node labels
+    sha256: 13d832eb6ffa084192daf6e5750250028a18437ee692c38d29a10cd60e18aaf4
+  IMDB-MULTI:
+    size: small
+    node_labels: degree   # no node labels: node degree is used (section 4.2)
+    sha256: a4a302149ebf4c76fa1f0fb108baff89fcbf9d35de306b18f27a8419b9a1a690
+  REDDIT-MULTI-12K:
+    size: large
+    node_labels: degree
+    sha256: dc133043edae3df088a4bfbd09595f105c0a6e2df533662b6ddc7d3268b5b49b
+
+methods:
+  graph2vec: {environment: karateclub}
+  fgsd: {environment: karateclub}
+  gin: {environment: main}
+  wl_kernel: {environment: main}
+
+embedding_dimensions: [32, 128, 512]
+
+cross_validation:
+  small: {folds: 10, repeats: 3, max_grid_settings: 4}
+  large: {folds: 5, repeats: 1}   # fixed hyperparameters, no grid
+  # Share of each fold's training graphs held out for model selection. Our choice,
+  # following Errica et al. (ICLR 2020), which the assignment cites for the protocol.
+  validation_fraction: 0.1
+
+gin:
+  max_epochs_large: 50   # upper bound for REDDIT-MULTI-12K, trained with mini-batches
+
+timing:
+  runs: 5       # every timing is repeated this many times
+
+stability:
+  edge_fractions: [0.05, 0.20]
+  modes: [add, remove]
+  nearest_neighbours: 10
+
+# All randomness is derived from these. Our choice; the assignment only asks that they are
+# fixed and stated.
+seeds:
+  splits: [0, 1, 2]     # one per cross-validation repeat; single-run datasets use the first
+  model: 0              # embeddings and GIN; repeat r uses model + r
+  stability_pair: [0, 1]  # the two unperturbed runs whose overlap is the reference level
+  perturbation: 0

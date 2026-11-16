@@ -1,0 +1,14 @@
+# Environment "karateclub": Graph2Vec and FGSD (unsupervised whole-graph embeddings).
+# Python 3.10.
+#
+# KarateClub 1.3.3 (22 Oct 2022) is the last release. It needs numpy<1.23, networkx<2.7
+# and pandas<=1.3.5, and networkx 2.6 calls scipy.errstate, which SciPy 1.12 removed.
+# The lock is therefore resolved as of 1 Nov 2022 (uv --exclude-newer), which gives the
+# package versions the library was released against.
+#
+# psutil is ours, not KarateClub's: it measures memory. It is exempt from the date limit
+# (--exclude-newer-package) and pinned to the version the main environment uses, so both
+# environments measure with the same tool. Old psutil also has no Linux ARM wheels.
+karateclub==1.3.3
+pyyaml
+psutil==7.2.2

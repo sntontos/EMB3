@@ -1,0 +1,7 @@
+.git/
+.venvs/
+data/
+**/__pycache__/
+**/*.egg-info/
+.DS_Store
+*.pdf

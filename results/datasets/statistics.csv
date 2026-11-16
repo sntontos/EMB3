@@ -1,0 +1,4 @@
+dataset,graphs,classes,smallest_class,largest_class,avg_nodes,max_nodes,avg_edges,max_edges,max_degree,distinct_node_labels,disconnected_graphs,isolated_nodes
+ENZYMES,600,6,100,100,32.63,126,62.14,149,9,3 (from the dataset),31,106
+IMDB-MULTI,1500,3,500,500,13.0,89,65.94,1467,88,59 (node degree),0,0
+REDDIT-MULTI-12K,11929,11,513,2592,391.41,3782,456.89,5171,3062,910 (node degree),6931,89
