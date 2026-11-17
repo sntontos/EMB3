@@ -6,6 +6,12 @@ paths:
   results: results    # tables, figures and the system record (committed)
   splits: splits      # cross-validation splits (committed)
 
+# Threads each numerical library may use (BLAS, OpenMP, PyTorch). One thread for every
+# method: Graph2Vec, the WL kernel and the SVM are single-threaded anyway, so this gives
+# all methods the same resources and makes timings repeatable. Our choice. Left at the
+# library default (12 threads here), FGSD ran 15 times slower on ENZYMES.
+threads: 1
+
 tudataset_url: https://www.chrsmrrs.com/graphkerneldatasets
 
 datasets:
@@ -23,13 +29,62 @@ datasets:
     node_labels: degree
     sha256: dc133043edae3df088a4bfbd09595f105c0a6e2df533662b6ddc7d3268b5b49b
 
+# `settings` are the named hyperparameter settings of a method: each lists the values that
+# differ from the defaults in src/emb3/methods/<method>.py. "library" is the library's own
+# default. Which settings enter model selection is listed under `classification` below.
 methods:
-  graph2vec: {environment: karateclub}
-  fgsd: {environment: karateclub}
-  gin: {environment: main}
-  wl_kernel: {environment: main}
+  graph2vec:
+    environment: karateclub
+    settings:
+      library: {}                 # KarateClub defaults: 10 epochs, down-sampling 0.0001
+      epochs100: {epochs: 100}
+  fgsd:
+    environment: karateclub
+    settings:
+      library: {}                 # KarateClub default histogram range (0, 20)
+  gin:
+    environment: main
+    settings:
+      sum5: {pool: sum, num_layers: 5}    # the layout of PyTorch Geometric's reference example
+      mean5: {pool: mean, num_layers: 5}
+      sum3: {pool: sum, num_layers: 3}
+      mean3: {pool: mean, num_layers: 3}
+  wl_kernel:
+    environment: main
+    settings:
+      iter1: {n_iter: 1}
+      iter3: {n_iter: 3}
+      iter5: {n_iter: 5}          # GraKeL's default number of iterations
 
 embedding_dimensions: [32, 128, 512]
+
+# Model selection: the candidates of each method, at most four (section 4.3a-i). Each is a
+# two-by-two grid over the method's main structural choice and one regularisation choice.
+# On the small datasets the candidate with the best validation accuracy is chosen in every
+# fold. The FIRST candidate is the reference setting: it is used unchanged on the large
+# dataset (fixed hyperparameters) and it is the one whose compute cost is reported.
+# `embedding` and `setting` refer to the names under `methods` above; C is the SVM penalty.
+classification:
+  graph2vec:
+    - {name: epochs100_C1, embedding: epochs100, C: 1}
+    - {name: epochs100_C10, embedding: epochs100, C: 10}
+    - {name: library_C1, embedding: library, C: 1}
+    - {name: library_C10, embedding: library, C: 10}
+  fgsd:                     # normalise: histogram as shares of node pairs instead of raw counts
+    - {name: counts_C1, embedding: library, normalise: false, C: 1}
+    - {name: counts_C10, embedding: library, normalise: false, C: 10}
+    - {name: shares_C1, embedding: library, normalise: true, C: 1}
+    - {name: shares_C10, embedding: library, normalise: true, C: 10}
+  gin:
+    - {name: sum5, setting: sum5}
+    - {name: mean5, setting: mean5}
+    - {name: sum3, setting: sum3}
+    - {name: mean3, setting: mean3}
+  wl_kernel:
+    - {name: iter5_C1, embedding: iter5, C: 1}
+    - {name: iter5_C10, embedding: iter5, C: 10}
+    - {name: iter3_C1, embedding: iter3, C: 1}
+    - {name: iter3_C10, embedding: iter3, C: 10}
 
 cross_validation:
   small: {folds: 10, repeats: 3, max_grid_settings: 4}
@@ -38,11 +93,15 @@ cross_validation:
   # following Errica et al. (ICLR 2020), which the assignment cites for the protocol.
   validation_fraction: 0.1
 
-gin:
-  max_epochs_large: 50   # upper bound for REDDIT-MULTI-12K, trained with mini-batches
+# GIN training budget by dataset size. The assignment caps REDDIT-MULTI-12K at 50 epochs
+# with mini-batches; the other numbers are ours. `patience` is the number of epochs without
+# a better validation accuracy after which training stops.
+gin_training:
+  small: {max_epochs: 200, patience: 50, batch_size: 32}
+  large: {max_epochs: 50, patience: null, batch_size: 128}
 
 timing:
-  runs: 5       # every timing is repeated this many times
+  runs: 5       # every timing is repeated this many times, each in a fresh process run alone
 
 stability:
   edge_fractions: [0.05, 0.20]

@@ -10,7 +10,7 @@
 #
 # It also fixes PYTHONHASHSEED, which can only be set before the interpreter starts. gensim
 # (used by Graph2Vec) lists a fixed hash seed and a single worker as conditions for
-# repeatable runs.
+# repeatable runs. And it caps the threads of the numerical libraries (see below).
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
@@ -23,5 +23,13 @@ if [ ! -x "$python" ]; then
 fi
 
 export PYTHONHASHSEED=0
+
+# One thread budget for every library, so that methods are timed under the same conditions.
+# It comes from `threads:` in the configuration (configs/default.yaml, or the file named by
+# EMB3_CONFIG); set EMB3_THREADS to override it.
+threads="${EMB3_THREADS:-$(awk '/^threads:/ {print $2; exit}' "${EMB3_CONFIG:-$ROOT/configs/default.yaml}")}"
+export EMB3_THREADS="${threads:-1}"
+export OMP_NUM_THREADS="$EMB3_THREADS" OPENBLAS_NUM_THREADS="$EMB3_THREADS" \
+       MKL_NUM_THREADS="$EMB3_THREADS" VECLIB_MAXIMUM_THREADS="$EMB3_THREADS"
 export PYTHONPATH="$ROOT/src${PYTHONPATH:+:$PYTHONPATH}"
 exec "$python" "$@"
