@@ -5,6 +5,7 @@
 #   scripts/run_experiments.sh gin-timed      GIN folds whose time is reported   timed, one job at a time
 #   scripts/run_experiments.sh gin            all other GIN folds                JOBS at a time (default 2), low priority
 #   scripts/run_experiments.sh classify       model selection and metrics        one job at a time
+#   scripts/run_experiments.sh cluster        k-means scores, t-SNE/UMAP figures one job at a time
 #   scripts/run_experiments.sh summarize      tables and figure from what exists
 #   scripts/run_experiments.sh all            every stage for the small datasets, then for the large one
 #
@@ -21,7 +22,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 mkdir -p logs
 
-stage="${1:?usage: scripts/run_experiments.sh <embeddings|gin-timed|gin|classify|summarize|all> [plan options]}"
+stage="${1:?usage: scripts/run_experiments.sh <embeddings|gin-timed|gin|classify|cluster|summarize|all> [plan options]}"
 shift
 jobs="${JOBS:-2}"
 export FAILED_LOG="$ROOT/logs/failed_jobs.txt"
@@ -85,7 +86,7 @@ if [ "$stage" = all ]; then
     group="$(scripts/run.sh main -W ignore -m emb3.plan datasets --size "$size")"
     [ -n "$group" ] || continue
     echo "==== $size datasets: $group" >&2
-    for name in embeddings gin-timed gin classify summarize; do
+    for name in embeddings gin-timed gin classify cluster summarize; do
       # shellcheck disable=SC2086
       run_stage "$name" --datasets $group "$@"
     done

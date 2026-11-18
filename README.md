@@ -88,6 +88,7 @@ runs every stage, first for ENZYMES and IMDB-MULTI (a few hours), then for REDDI
 | `gin-timed` | The GIN folds whose training time is reported (5 per dataset and dimension) | timed, one job at a time |
 | `gin` | All remaining GIN folds of all candidate settings | 2 at a time (`JOBS=2`), low priority |
 | `classify` | Model selection and test metrics per dataset, method and dimension | one job at a time |
+| `cluster` | k-means scores (ARI, NMI) per dataset, method and dimension; t-SNE and UMAP figures and the preprocessing ablation per dataset | one job at a time |
 | `summarize` | Result tables and the accuracy-versus-cost figure | |
 
 A stage can be restricted, for example `scripts/run_experiments.sh embeddings --datasets ENZYMES IMDB-MULTI`.
@@ -113,6 +114,14 @@ shows what is done, what is running and the estimated time left.
 - **Same data for every method.** All classifiers are fitted on the fold's training graphs and scored on its test graphs. Nothing is refitted on training plus validation, because GIN needs the validation graphs to pick its epoch.
 - **Classifiers.** Graph2Vec and FGSD: an RBF SVM on the standardised embedding. WL kernel: an SVM on the precomputed kernel. GIN: trained end to end.
 - **Metrics.** Accuracy, macro-F1 and macro one-vs-rest AUC on each test fold, in `results/classification/`. Tables give the mean and the standard deviation across test folds.
+
+### Clustering protocol
+
+- **Setting.** Every method in its reference setting (the first classification candidate), since clustering has no labels to tune on. k-means with k = number of classes and 10 restarts, on the embedding standardised over the graphs being clustered. The WL kernel has no vectors, so it gets kernel k-means on the normalised kernel: the same algorithm in the WL feature space (`emb3.cluster.kernel_kmeans`, checked against scikit-learn's k-means on a linear kernel).
+- **Two protocols.** *Test graphs of each fold*, for all four methods: the test graphs of every cross-validation fold are clustered on their own. GIN's embedding comes from the model trained on that fold, which never saw these graphs' labels, and Graph2Vec and FGSD use seed *r* in repeat *r*, so all methods cluster exactly the same graphs. *Whole dataset*, for the label-free methods only (Graph2Vec, FGSD, WL kernel): all graphs at once, for seeds 0 to 4.
+- **Scores.** Adjusted Rand index and normalised mutual information against the class labels, in `results/clustering/`. NMI is not corrected for chance, and on a test fold of 60 graphs its chance level is about 0.14, so each row also has the NMI of the same clusters with their members shuffled at random. Each row also compares the clusters with graph size (k groups of equal count by number of nodes), which shows when k-means sorts graphs by size rather than by class.
+- **Preprocessing ablation.** `emb3.cluster_ablation` clusters the whole dataset with every label-free variant side by side: standardised or cosine-normalised vectors, each with and without PCA to 16 dimensions; FGSD also as shares of node pairs, which removes most size information; WL kernel k-means at 5 and 3 iterations, and spectral clustering on the small datasets. All variants are reported in `results/clustering/ablation.md` and none is chosen by its agreement with the labels; a silhouette score (no labels) shows what a label-free choice would prefer.
+- **Figures.** `results/figures/{tsne,umap}_<dataset>.png`: maps of each method's 128-dimensional representation (the WL kernel through its kernel distance), one row per method and one column per class, each panel highlighting one class. GIN is drawn with the model of fold 0, which was trained on about 80% of the graphs shown, so its map flatters it; the fair comparison is the test-fold scores. Map coordinates are cached under `data/projections/`.
 
 ### Timing protocol
 

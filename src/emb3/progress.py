@@ -17,6 +17,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 
+from emb3 import cluster, cluster_ablation, visualize
 from emb3.classify import result_path
 from emb3.config import ROOT, load_config, project_path
 from emb3.embed import embedding_path, is_done, kernel_path, kernel_record_path
@@ -25,6 +26,9 @@ from emb3.train_gin import gin_path
 
 OVERHEAD_SECONDS = 6.0           # starting Python, importing the libraries, loading the dataset
 CLASSIFY_GUESS = {"small": 20.0, "large": 300.0}   # measured: about 1 minute per REDDIT-MULTI-12K fold
+CLUSTER_GUESS = {"small": 15.0, "large": 120.0}    # rough guesses, per method and dimension
+VISUALIZE_GUESS = {"small": 90.0, "large": 1200.0}  # rough guesses, per dataset
+ABLATION_GUESS = {"small": 60.0, "large": 600.0}    # rough guesses, per dataset
 PARALLEL_STAGES = {"gin": 2}     # keep in step with JOBS in scripts/run_experiments.sh
 
 
@@ -42,6 +46,12 @@ def _record_and_result(config: Dict[str, Any], job: Job) -> Tuple[Path, Optional
 def job_done(config: Dict[str, Any], job: Job) -> bool:
     if job.module == "emb3.classify":
         return result_path(config, job.options["dataset"], job.options["method"], job.options.get("dimension")).exists()
+    if job.module == "emb3.cluster":
+        return cluster.result_path(config, job.options["dataset"], job.options["method"], job.options.get("dimension")).exists()
+    if job.module == "emb3.visualize":
+        return all(visualize.figure_path(config, job.options["dataset"], projection).exists() for projection in visualize.PROJECTIONS)
+    if job.module == "emb3.cluster_ablation":
+        return cluster_ablation.result_path(config, job.options["dataset"]).exists()
     record, result = _record_and_result(config, job)
     return is_done(record, result, require_timed=job.timed)
 
@@ -63,8 +73,15 @@ def _durations(config: Dict[str, Any]) -> Dict[Tuple[Any, ...], List[float]]:
 
 def estimate(config: Dict[str, Any], job: Job, durations: Dict[Tuple[Any, ...], List[float]]) -> Optional[float]:
     o = job.options
+    size = config["datasets"][o["dataset"]]["size"]
     if job.module == "emb3.classify":
-        return CLASSIFY_GUESS[config["datasets"][o["dataset"]]["size"]] if o["method"] != "gin" else 10.0
+        return CLASSIFY_GUESS[size] if o["method"] != "gin" else 10.0
+    if job.module == "emb3.cluster":
+        return CLUSTER_GUESS[size]
+    if job.module == "emb3.visualize":
+        return VISUALIZE_GUESS[size]
+    if job.module == "emb3.cluster_ablation":
+        return ABLATION_GUESS[size]
     method = "gin" if job.module == "emb3.train_gin" else o["method"]
     dimension = o.get("dimension")
     exact = durations.get((o["dataset"], method, o["setting"], dimension))
@@ -96,7 +113,7 @@ def running_jobs() -> List[Tuple[str, float]]:
         return []
     running = []
     for line in listing.splitlines():
-        match = re.search(r"-m (emb3\.(?:embed|train_gin|classify)) (.*)$", line)
+        match = re.search(r"-m (emb3\.(?:embed|train_gin|classify|cluster|cluster_ablation|visualize)) (.*)$", line)
         if match and "/bin/python" in line:
             running.append(("{} {}".format(match.group(1)[5:], match.group(2)), _elapsed_seconds(line.split()[0])))
     return running

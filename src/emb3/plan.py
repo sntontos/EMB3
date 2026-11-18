@@ -12,6 +12,8 @@ scripts/run_experiments.sh runs these lists. The stages, in order:
                  `timing.runs` folds (all folds of the large dataset). Must run alone.
     gin          Every GIN fold of every candidate setting. Not timed, may run in parallel.
     classify     Model selection and test metrics for every dataset, method and dimension.
+    cluster      k-means scores for every dataset, method and dimension, then the t-SNE and
+                 UMAP figures and the preprocessing ablation of each dataset. Not timed.
 
 Jobs that are already done are skipped by the commands themselves, so a list can always
 be run again after an interruption.
@@ -24,7 +26,7 @@ from typing import Any, Dict, List, Optional
 from emb3.classify import METHODS, candidates
 from emb3.config import load_config
 
-STAGES = ("embeddings", "gin-timed", "gin", "classify")
+STAGES = ("embeddings", "gin-timed", "gin", "classify", "cluster")
 TIMED_STAGES = ("embeddings", "gin-timed")
 
 
@@ -96,13 +98,17 @@ def jobs(
             for dimension in dimensions:
                 for option, repeat, fold in cells:
                     add("main", "emb3.train_gin", dataset=dataset, dimension=dimension, setting=option["setting"], repeat=repeat, fold=fold)
-        elif stage == "classify":
+        elif stage in ("classify", "cluster"):
+            module = "emb3.{}".format(stage)
             for method in methods:
                 if method == "wl_kernel":
-                    add("main", "emb3.classify", dataset=dataset, method="wl_kernel")
+                    add("main", module, dataset=dataset, method="wl_kernel")
                     continue
                 for dimension in dimensions:
-                    add("main", "emb3.classify", dataset=dataset, method=method, dimension=dimension)
+                    add("main", module, dataset=dataset, method=method, dimension=dimension)
+            if stage == "cluster":
+                add("main", "emb3.visualize", dataset=dataset)
+                add("main", "emb3.cluster_ablation", dataset=dataset)
     return planned
 
 

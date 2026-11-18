@@ -103,6 +103,23 @@ gin_training:
 timing:
   runs: 5       # every timing is repeated this many times, each in a fresh process run alone
 
+# Clustering (section 4.3b): k-means with k = number of classes, on each method's reference
+# setting (the first classification candidate), since there are no labels to tune on.
+# The numbers are ours: n_init is scikit-learn's classic number of k-means restarts, and
+# the projection settings are the defaults of scikit-learn's t-SNE and of umap-learn.
+clustering:
+  n_init: 10                 # k-means restarts; the run with the lowest inertia is kept
+  chance_permutations: 20    # random relabellings that estimate the chance level of NMI
+  projection_dimension: 128  # embedding dimension shown in the t-SNE and UMAP figures
+  tsne: {perplexity: 30}
+  umap: {n_neighbors: 15, min_dist: 0.1}
+  # Label-free preprocessing variants, all reported side by side (emb3.cluster_ablation).
+  ablation:
+    dimension: 128
+    pca_components: 16
+    silhouette_sample: 3000  # larger datasets: silhouette on a random sample of this many graphs
+    wl_settings: [iter5, iter3]
+
 stability:
   edge_fractions: [0.05, 0.20]
   modes: [add, remove]
