@@ -91,6 +91,7 @@ def main(argv: Optional[list] = None) -> None:
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--run", type=int, default=0, help="wl_kernel only: repeat number of a timing run; runs after the first store the record but not the matrix")
     parser.add_argument("--setting", default=None, help="named hyperparameter setting (default: the first one in the configuration)")
+    parser.add_argument("--variant", default="original", help="perturbed copy of the dataset made by emb3.perturb (stability analysis)")
     parser.add_argument("--force", action="store_true", help="recompute even if the result exists")
     parser.add_argument("--list-settings", action="store_true", help="print the method's setting names and exit")
     args = parser.parse_args(argv)
@@ -107,10 +108,10 @@ def main(argv: Optional[list] = None) -> None:
     if args.dataset is None or (args.dimension is None and not is_kernel):
         parser.error("--dataset is required, and --dimension for embedding methods")
     if is_kernel:
-        target = kernel_path(config, args.dataset, setting)
-        record_path = kernel_record_path(config, args.dataset, setting, args.run)
+        target = kernel_path(config, args.dataset, setting, args.variant)
+        record_path = kernel_record_path(config, args.dataset, setting, args.run, args.variant)
     else:
-        target = embedding_path(config, args.dataset, args.method, setting, args.dimension, args.seed)
+        target = embedding_path(config, args.dataset, args.method, setting, args.dimension, args.seed, args.variant)
         record_path = target.with_suffix(".json")
     save_result = not (is_kernel and args.run > 0)
     if not args.force and is_done(record_path, target if save_result else None):
@@ -121,7 +122,7 @@ def main(argv: Optional[list] = None) -> None:
     from emb3.measure import Meter, machine_state, thread_settings
     from emb3.seeds import seed_everything
 
-    dataset = load_dataset(args.dataset, config)
+    dataset = load_dataset(args.dataset, config, args.variant)
     seed_everything(args.seed)
     overrides = settings[setting] or {}
     with Meter() as total:
@@ -140,7 +141,7 @@ def main(argv: Optional[list] = None) -> None:
 
     record.update(
         dataset=args.dataset,
-        variant="original",
+        variant=args.variant,
         setting=setting,
         dimension=None if is_kernel else args.dimension,
         seed=None if is_kernel else args.seed,
@@ -158,8 +159,8 @@ def main(argv: Optional[list] = None) -> None:
         np.save(target, result)
     record_path.write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")
     stages = [record[stage] for stage in ("train", "generate") if record.get(stage)]
-    print("{}/{} {}{}: {:.1f}s, peak {:.2f} GB -> {}".format(
-        args.method, setting, args.dataset,
+    print("{}/{} {}{}{}: {:.1f}s, peak {:.2f} GB -> {}".format(
+        args.method, setting, args.dataset, "" if args.variant == "original" else " [{}]".format(args.variant),
         " run {}".format(args.run) if is_kernel else " d={} seed={}".format(args.dimension, args.seed),
         sum(stage["seconds"] for stage in stages),
         max(stage["peak_rss_bytes"] for stage in stages) / 2**30, target if save_result else record_path), file=sys.stderr)

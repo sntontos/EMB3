@@ -138,13 +138,17 @@ class GraphDataset:
             )
 
 
-def processed_path(name: str, config: Optional[Dict[str, Any]] = None) -> Path:
-    return project_path(config or load_config(), "data") / "processed" / "{}.npz".format(name)
+def processed_path(name: str, config: Optional[Dict[str, Any]] = None, variant: str = "original") -> Path:
+    """Where a prepared dataset lives. `variant` names a perturbed copy made by emb3.perturb
+    for the stability analysis; "original" is the dataset itself."""
+    folder = project_path(config or load_config(), "data") / "processed"
+    return folder / "{}.npz".format(name) if variant == "original" else folder / variant / "{}.npz".format(name)
 
 
-def load_dataset(name: str, config: Optional[Dict[str, Any]] = None) -> GraphDataset:
-    """Loads a dataset prepared by scripts/prepare_data.sh."""
-    path = processed_path(name, config)
+def load_dataset(name: str, config: Optional[Dict[str, Any]] = None, variant: str = "original") -> GraphDataset:
+    """Loads a dataset prepared by scripts/prepare_data.sh, or a perturbed copy of it."""
+    path = processed_path(name, config, variant)
     if not path.exists():
-        raise FileNotFoundError("{} is missing. Run scripts/prepare_data.sh first.".format(path))
+        source = "scripts/prepare_data.sh" if variant == "original" else "emb3.perturb (stability-embeddings stage)"
+        raise FileNotFoundError("{} is missing. Run {} first.".format(path, source))
     return GraphDataset.load(path)

@@ -89,6 +89,9 @@ runs every stage, first for ENZYMES and IMDB-MULTI (a few hours), then for REDDI
 | `gin` | All remaining GIN folds of all candidate settings | 2 at a time (`JOBS=2`), low priority |
 | `classify` | Model selection and test metrics per dataset, method and dimension | one job at a time |
 | `cluster` | k-means scores (ARI, NMI) per dataset, method and dimension; t-SNE and UMAP figures and the preprocessing ablation per dataset | one job at a time |
+| `stability-embeddings` | Perturbed copies of ENZYMES and REDDIT-MULTI-12K (edges added or removed), their Graph2Vec and FGSD embeddings and WL kernels | one job at a time |
+| `stability-gin` | GIN on every fold of every perturbed copy, plus fold 0 of the original data with a second seed | 2 at a time, low priority |
+| `stability` | Neighbourhood overlap and accuracy change per dataset and method | one job at a time |
 | `summarize` | Result tables and the accuracy-versus-cost figure | |
 
 A stage can be restricted, for example `scripts/run_experiments.sh embeddings --datasets ENZYMES IMDB-MULTI`.
@@ -105,7 +108,7 @@ scripts/progress.sh
 
 shows what is done, what is running and the estimated time left.
 
-**Keeping the laptop comfortable.** The timed stages use one CPU core, which is also what makes their timings comparable; only the untimed `gin` stage uses two, at low priority. The script keeps the Mac awake but lets the display sleep. Before every job that runs alone it checks the power source and waits while the Mac is on battery, so all timed runs happen on mains power. Every job record stores the power source, Low Power Mode and any thermal limit at the time it ran. During the timed stages, light use of the Mac (browsing, editing) is fine; heavy work (video calls, builds, games) would distort the timings. The lid must stay open: a closed lid puts the Mac to sleep.
+**Keeping the laptop comfortable.** The timed stages use one CPU core, which is also what makes their timings comparable; only the untimed `gin` stage uses two, at low priority. The script keeps the Mac awake but lets the display sleep. Before every job of a timed stage it checks the power source and waits while the Mac is on battery, so all timed runs happen on mains power; the untimed stages also run on battery. Every job record stores the power source, Low Power Mode and any thermal limit at the time it ran. During the timed stages, light use of the Mac (browsing, editing) is fine; heavy work (video calls, builds, games) would distort the timings. The lid must stay open: a closed lid puts the Mac to sleep.
 
 ### Classification protocol
 
@@ -122,6 +125,14 @@ shows what is done, what is running and the estimated time left.
 - **Scores.** Adjusted Rand index and normalised mutual information against the class labels, in `results/clustering/`. NMI is not corrected for chance, and on a test fold of 60 graphs its chance level is about 0.14, so each row also has the NMI of the same clusters with their members shuffled at random. Each row also compares the clusters with graph size (k groups of equal count by number of nodes), which shows when k-means sorts graphs by size rather than by class.
 - **Preprocessing ablation.** `emb3.cluster_ablation` clusters the whole dataset with every label-free variant side by side: standardised or cosine-normalised vectors, each with and without PCA to 16 dimensions; FGSD also as shares of node pairs, which removes most size information; WL kernel k-means at 5 and 3 iterations, and spectral clustering on the small datasets. All variants are reported in `results/clustering/ablation.md` and none is chosen by its agreement with the labels; a silhouette score (no labels) shows what a label-free choice would prefer.
 - **Figures.** `results/figures/{tsne,umap}_<dataset>.png`: maps of each method's 128-dimensional representation (the WL kernel through its kernel distance), one row per method and one column per class, each panel highlighting one class. GIN is drawn with the model of fold 0, which was trained on about 80% of the graphs shown, so its map flatters it; the fair comparison is the test-fold scores. Map coordinates are cached under `data/projections/`.
+
+### Stability protocol
+
+- **Datasets.** ENZYMES (small) and REDDIT-MULTI-12K (large), listed under `stability` in `configs/default.yaml`.
+- **Perturbation.** `emb3.perturb` makes four copies of each: 5% and 20% of every graph's edges added (uniformly among unconnected node pairs) or removed (uniformly among its edges). The count per graph is rounded up or down at random in proportion to the remainder, so small graphs are perturbed by the same share on average. Native node labels are kept; degree labels are recomputed from the new edges. Fixed seed `seeds.perturbation`.
+- **Representations.** Every method in its reference setting at 128 dimensions, recomputed on each copy. GIN has no fold-independent embedding, so its neighbourhoods come from the model of repeat 0, fold 0, which embeds every graph.
+- **Stability score.** For every graph, its 10 nearest other graphs (Euclidean on the standardised embedding, kernel distance for WL; ties to the lower index), compared between two representations by the Jaccard overlap and averaged over graphs. Vectors are never compared directly, since runs are not aligned. Reference: the original data with the two seeds of `seeds.stability_pair`, which is 1 for the deterministic FGSD and WL kernel.
+- **Accuracy change.** Each method's reference setting with fixed hyperparameters on every fold, original against perturbed copy, same folds; the table gives the original accuracy and the per-fold change in percentage points. Results in `results/stability/`.
 
 ### Timing protocol
 

@@ -27,9 +27,12 @@ from emb3.config import is_timed_run, load_config, project_path
 from emb3.embed import installed_versions, is_done, method_settings
 
 
-def gin_path(config: Dict[str, Any], dataset: str, setting: str, dimension: int, repeat: int, fold: int, variant: str = "original") -> Path:
+def gin_path(config: Dict[str, Any], dataset: str, setting: str, dimension: int, repeat: int, fold: int,
+             variant: str = "original", seed: Optional[int] = None) -> Path:
+    """`seed` is given only for a run whose seed differs from the usual one of its repeat
+    (the seed pair of the stability analysis); its file name then ends in _s<seed>."""
     folder = project_path(config, "data") / "gin" / variant / dataset / setting / "d{}".format(dimension)
-    return folder / "r{}_f{}.npz".format(repeat, fold)
+    return folder / ("r{}_f{}.npz".format(repeat, fold) if seed is None else "r{}_f{}_s{}.npz".format(repeat, fold, seed))
 
 
 def main(argv: Optional[list] = None) -> None:
@@ -39,6 +42,8 @@ def main(argv: Optional[list] = None) -> None:
     parser.add_argument("--repeat", type=int, default=0)
     parser.add_argument("--fold", type=int, default=0)
     parser.add_argument("--setting", default=None, help="named hyperparameter setting (default: the first one in the configuration)")
+    parser.add_argument("--variant", default="original", help="perturbed copy of the dataset made by emb3.perturb (stability analysis)")
+    parser.add_argument("--seed", type=int, default=None, help="model seed (default: seeds.model + repeat); stored under its own file name")
     parser.add_argument("--force", action="store_true", help="retrain even if the result exists")
     args = parser.parse_args(argv)
 
@@ -47,7 +52,7 @@ def main(argv: Optional[list] = None) -> None:
     setting = args.setting or next(iter(settings))
     if setting not in settings:
         parser.error("unknown setting {!r} for gin; configured: {}".format(setting, ", ".join(settings)))
-    target = gin_path(config, args.dataset, setting, args.dimension, args.repeat, args.fold)
+    target = gin_path(config, args.dataset, setting, args.dimension, args.repeat, args.fold, args.variant, args.seed)
     if not args.force and is_done(target.with_suffix(".json"), target):
         print("{} is done, skipping (use --force to retrain)".format(target), file=sys.stderr)
         return
@@ -59,11 +64,11 @@ def main(argv: Optional[list] = None) -> None:
     from emb3.seeds import seed_everything
     from emb3.splits import load_splits
 
-    dataset = load_dataset(args.dataset, config)
+    dataset = load_dataset(args.dataset, config, args.variant)
     train, validation, test = load_splits(args.dataset, config).fold(args.repeat, args.fold)
     budget = config["gin_training"][config["datasets"][args.dataset]["size"]]
     params = dict(budget, **(settings[setting] or {}))
-    seed = config["seeds"]["model"] + args.repeat
+    seed = config["seeds"]["model"] + args.repeat if args.seed is None else args.seed
     seed_everything(seed)
 
     with Meter() as total:
@@ -80,7 +85,7 @@ def main(argv: Optional[list] = None) -> None:
     test_accuracy = float(np.mean(test_proba.argmax(axis=1) == dataset.y[test]))
     record.update(
         dataset=args.dataset,
-        variant="original",
+        variant=args.variant,
         setting=setting,
         dimension=args.dimension,
         repeat=args.repeat,
@@ -106,9 +111,10 @@ def main(argv: Optional[list] = None) -> None:
         embedding=embedding,
     )
     target.with_suffix(".json").write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")
-    print("gin/{} {} d={} repeat {} fold {}: {} epochs (best {}), train {:.1f}s, embed {:.1f}s, peak {:.2f} GB, "
+    print("gin/{} {}{} d={} repeat {} fold {} seed {}: {} epochs (best {}), train {:.1f}s, embed {:.1f}s, peak {:.2f} GB, "
           "validation {:.3f}, test {:.3f} -> {}".format(
-              setting, args.dataset, args.dimension, args.repeat, args.fold, record["epochs_run"], record["best_epoch"],
+              setting, args.dataset, "" if args.variant == "original" else " [{}]".format(args.variant),
+              args.dimension, args.repeat, args.fold, seed, record["epochs_run"], record["best_epoch"],
               record["train"]["seconds"], generate.seconds, max(record["train"]["peak_rss_bytes"], generate.peak_rss_bytes) / 2**30,
               record["best_validation_accuracy"], test_accuracy, target), file=sys.stderr)
 

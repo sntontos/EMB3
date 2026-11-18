@@ -6,6 +6,9 @@
 #   scripts/run_experiments.sh gin            all other GIN folds                JOBS at a time (default 2), low priority
 #   scripts/run_experiments.sh classify       model selection and metrics        one job at a time
 #   scripts/run_experiments.sh cluster        k-means scores, t-SNE/UMAP figures one job at a time
+#   scripts/run_experiments.sh stability-embeddings   perturbed copies, their embeddings   one job at a time
+#   scripts/run_experiments.sh stability-gin  GIN on the perturbed copies       JOBS at a time, low priority
+#   scripts/run_experiments.sh stability      neighbourhood overlap, accuracy change   one job at a time
 #   scripts/run_experiments.sh summarize      tables and figure from what exists
 #   scripts/run_experiments.sh all            every stage for the small datasets, then for the large one
 #
@@ -13,16 +16,16 @@
 #   scripts/run_experiments.sh embeddings --datasets ENZYMES IMDB-MULTI
 #
 # Finished jobs are skipped, so a stage can be started again after an interruption. A job
-# that fails is listed in logs/failed_jobs.txt and the run goes on. Before every job that
-# runs one at a time, the script waits while the Mac is on battery, so that all timed runs
-# happen on mains power and a drained battery cannot cut a run short.
+# that fails is listed in logs/failed_jobs.txt and the run goes on. Before every job of a
+# timed stage (embeddings, gin-timed), the script waits while the Mac is on battery, so that
+# all timed runs happen on mains power. Untimed stages also run on battery.
 # Watch the progress with scripts/progress.sh.
 set -uo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 mkdir -p logs
 
-stage="${1:?usage: scripts/run_experiments.sh <embeddings|gin-timed|gin|classify|cluster|summarize|all> [plan options]}"
+stage="${1:?usage: scripts/run_experiments.sh <embeddings|gin-timed|gin|classify|cluster|stability-embeddings|stability-gin|stability|summarize|all> [plan options]}"
 shift
 jobs="${JOBS:-2}"
 export FAILED_LOG="$ROOT/logs/failed_jobs.txt"
@@ -57,18 +60,20 @@ run_stage() {
     rm -f "$list"
     return
   fi
-  local count
+  local count timed=0
   count="$(grep -c . "$list" || true)"
-  if [ "$name" = gin ]; then
+  case "$name" in embeddings|gin-timed) timed=1 ;; esac
+  if [ "$name" = gin ] || [ "$name" = stability-gin ]; then
     echo "== $name: $count jobs, $jobs at a time at low priority ($(date '+%a %H:%M'))" >&2
-    wait_for_mains
     # One line is one command made of plain words, so xargs can pass it on word by word.
     xargs -P "$jobs" -L 1 sh -c 'nice -n 10 "$@" || { echo "$(date "+%Y-%m-%d %H:%M") $*" >> "$FAILED_LOG"; echo "-- FAILED: $*" >&2; }' _ < "$list"
   else
     echo "== $name: $count jobs, one at a time ($(date '+%a %H:%M'))" >&2
     while IFS= read -r command; do
       [ -n "$command" ] || continue
-      wait_for_mains
+      if [ "$timed" = 1 ]; then
+        wait_for_mains
+      fi
       if ! sh -c "$command" < /dev/null; then
         echo "$(date '+%Y-%m-%d %H:%M') $command" >> "$FAILED_LOG"
         echo "-- FAILED: $command" >&2
@@ -86,7 +91,7 @@ if [ "$stage" = all ]; then
     group="$(scripts/run.sh main -W ignore -m emb3.plan datasets --size "$size")"
     [ -n "$group" ] || continue
     echo "==== $size datasets: $group" >&2
-    for name in embeddings gin-timed gin classify cluster summarize; do
+    for name in embeddings gin-timed gin classify cluster stability-embeddings stability-gin stability summarize; do
       # shellcheck disable=SC2086
       run_stage "$name" --datasets $group "$@"
     done

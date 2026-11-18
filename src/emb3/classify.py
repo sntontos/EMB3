@@ -67,8 +67,8 @@ def scores(y_true: np.ndarray, predicted: np.ndarray, proba: np.ndarray, num_cla
 class SVMMethod:
     """Graph2Vec, FGSD and the WL kernel: an SVM on stored embeddings or a stored kernel."""
 
-    def __init__(self, config: Dict[str, Any], dataset: GraphDataset, method: str, dimension: Optional[int]) -> None:
-        self.config, self.dataset, self.method, self.dimension = config, dataset, method, dimension
+    def __init__(self, config: Dict[str, Any], dataset: GraphDataset, method: str, dimension: Optional[int], variant: str = "original") -> None:
+        self.config, self.dataset, self.method, self.dimension, self.variant = config, dataset, method, dimension, variant
         self._cache: Dict[Tuple[Any, ...], np.ndarray] = {}
 
     def _features(self, candidate: Dict[str, Any], seed: int) -> np.ndarray:
@@ -76,9 +76,9 @@ class SVMMethod:
         if key not in self._cache:
             name = self.dataset.name
             if self.method == "wl_kernel":
-                path = kernel_path(self.config, name, candidate["embedding"])
+                path = kernel_path(self.config, name, candidate["embedding"], self.variant)
             else:
-                path = embedding_path(self.config, name, self.method, candidate["embedding"], self.dimension, seed)
+                path = embedding_path(self.config, name, self.method, candidate["embedding"], self.dimension, seed, self.variant)
             if not path.exists():
                 raise FileNotFoundError("{} is missing. Run the embeddings stage first.".format(path))
             features = np.load(path, allow_pickle=False).astype(np.float64)
@@ -111,15 +111,21 @@ class SVMMethod:
         rows = self._slice(features, test, train)
         return model.predict(rows), model.predict_proba(rows)
 
+    def predict(self, candidate: Dict[str, Any], seed: int, repeat: int, fold: int, train: np.ndarray, test: np.ndarray) -> np.ndarray:
+        """Test predictions only, without the probability calibration that AUC needs."""
+        features, y = self._features(candidate, seed), self.dataset.y
+        model = self._model(candidate, seed, probability=False).fit(self._slice(features, train, train), y[train])
+        return model.predict(self._slice(features, test, train))
+
 
 class GINMethod:
     """GIN: reads the predictions that emb3.train_gin stored for each fold and setting."""
 
-    def __init__(self, config: Dict[str, Any], dataset: GraphDataset, method: str, dimension: Optional[int]) -> None:
-        self.config, self.dataset, self.dimension = config, dataset, dimension
+    def __init__(self, config: Dict[str, Any], dataset: GraphDataset, method: str, dimension: Optional[int], variant: str = "original") -> None:
+        self.config, self.dataset, self.dimension, self.variant = config, dataset, dimension, variant
 
     def _stored(self, candidate: Dict[str, Any], repeat: int, fold: int) -> Any:
-        path = gin_path(self.config, self.dataset.name, candidate["setting"], self.dimension, repeat, fold)
+        path = gin_path(self.config, self.dataset.name, candidate["setting"], self.dimension, repeat, fold, self.variant)
         if not path.exists():
             raise FileNotFoundError("{} is missing. Run the GIN stages first.".format(path))
         return np.load(path, allow_pickle=False)
@@ -137,6 +143,9 @@ class GINMethod:
         proba = stored["test_proba"].astype(np.float64)
         proba = proba / proba.sum(axis=1, keepdims=True)
         return proba.argmax(axis=1), proba
+
+    def predict(self, candidate: Dict[str, Any], seed: int, repeat: int, fold: int, train: np.ndarray, test: np.ndarray) -> np.ndarray:
+        return self.test(candidate, seed, repeat, fold, train, test)[0]
 
 
 def run(config: Dict[str, Any], dataset_name: str, method: str, dimension: Optional[int]) -> List[Dict[str, Any]]:

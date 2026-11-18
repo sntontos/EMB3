@@ -120,7 +120,13 @@ clustering:
     silhouette_sample: 3000  # larger datasets: silhouette on a random sample of this many graphs
     wl_settings: [iter5, iter3]
 
+# Stability (section 4.3c): one small and one large dataset. ENZYMES is our choice of the
+# small one: the methods differ most there in classification, and it is the only dataset
+# with node labels of its own, which perturbing the edges leaves unchanged. Each method in
+# its reference setting at one embedding dimension (ours: the middle of the sweep).
 stability:
+  datasets: [ENZYMES, REDDIT-MULTI-12K]
+  dimension: 128
   edge_fractions: [0.05, 0.20]
   modes: [add, remove]
   nearest_neighbours: 10

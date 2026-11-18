@@ -17,7 +17,8 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 
-from emb3 import cluster, cluster_ablation, visualize
+from emb3 import cluster, cluster_ablation, perturb, stability, visualize
+from emb3.graphs import processed_path
 from emb3.classify import result_path
 from emb3.config import ROOT, load_config, project_path
 from emb3.embed import embedding_path, is_done, kernel_path, kernel_record_path
@@ -29,17 +30,21 @@ CLASSIFY_GUESS = {"small": 20.0, "large": 300.0}   # measured: about 1 minute pe
 CLUSTER_GUESS = {"small": 15.0, "large": 120.0}    # rough guesses, per method and dimension
 VISUALIZE_GUESS = {"small": 90.0, "large": 1200.0}  # rough guesses, per dataset
 ABLATION_GUESS = {"small": 60.0, "large": 600.0}    # rough guesses, per dataset
-PARALLEL_STAGES = {"gin": 2}     # keep in step with JOBS in scripts/run_experiments.sh
+PERTURB_GUESS = {"small": 10.0, "large": 120.0}     # rough guesses, per dataset
+STABILITY_GUESS = {"small": 60.0, "large": 900.0}   # rough guesses, per dataset and method
+PARALLEL_STAGES = {"gin": 2, "stability-gin": 2}    # keep in step with JOBS in scripts/run_experiments.sh
 
 
 def _record_and_result(config: Dict[str, Any], job: Job) -> Tuple[Path, Optional[Path]]:
     o = job.options
+    variant = o.get("variant", "original")
     if job.module == "emb3.embed" and o["method"] == "wl_kernel":
-        return kernel_record_path(config, o["dataset"], o["setting"], o["run"]), kernel_path(config, o["dataset"], o["setting"]) if o["run"] == 0 else None
+        record = kernel_record_path(config, o["dataset"], o["setting"], o["run"], variant)
+        return record, kernel_path(config, o["dataset"], o["setting"], variant) if o["run"] == 0 else None
     if job.module == "emb3.embed":
-        target = embedding_path(config, o["dataset"], o["method"], o["setting"], o["dimension"], o["seed"])
+        target = embedding_path(config, o["dataset"], o["method"], o["setting"], o["dimension"], o["seed"], variant)
         return target.with_suffix(".json"), target
-    target = gin_path(config, o["dataset"], o["setting"], o["dimension"], o["repeat"], o["fold"])
+    target = gin_path(config, o["dataset"], o["setting"], o["dimension"], o["repeat"], o["fold"], variant, o.get("seed"))
     return target.with_suffix(".json"), target
 
 
@@ -52,6 +57,10 @@ def job_done(config: Dict[str, Any], job: Job) -> bool:
         return all(visualize.figure_path(config, job.options["dataset"], projection).exists() for projection in visualize.PROJECTIONS)
     if job.module == "emb3.cluster_ablation":
         return cluster_ablation.result_path(config, job.options["dataset"]).exists()
+    if job.module == "emb3.perturb":
+        return all(processed_path(job.options["dataset"], config, name).exists() for name, _, _ in perturb.variants(config))
+    if job.module == "emb3.stability":
+        return all(path.exists() for path in stability.result_paths(config, job.options["dataset"], job.options["method"]))
     record, result = _record_and_result(config, job)
     return is_done(record, result, require_timed=job.timed)
 
@@ -82,6 +91,10 @@ def estimate(config: Dict[str, Any], job: Job, durations: Dict[Tuple[Any, ...], 
         return VISUALIZE_GUESS[size]
     if job.module == "emb3.cluster_ablation":
         return ABLATION_GUESS[size]
+    if job.module == "emb3.perturb":
+        return PERTURB_GUESS[size]
+    if job.module == "emb3.stability":
+        return STABILITY_GUESS[size]
     method = "gin" if job.module == "emb3.train_gin" else o["method"]
     dimension = o.get("dimension")
     exact = durations.get((o["dataset"], method, o["setting"], dimension))
@@ -113,7 +126,7 @@ def running_jobs() -> List[Tuple[str, float]]:
         return []
     running = []
     for line in listing.splitlines():
-        match = re.search(r"-m (emb3\.(?:embed|train_gin|classify|cluster|cluster_ablation|visualize)) (.*)$", line)
+        match = re.search(r"-m (emb3\.(?:embed|train_gin|classify|cluster|cluster_ablation|visualize|perturb|stability)) (.*)$", line)
         if match and "/bin/python" in line:
             running.append(("{} {}".format(match.group(1)[5:], match.group(2)), _elapsed_seconds(line.split()[0])))
     return running

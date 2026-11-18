@@ -14,6 +14,13 @@ scripts/run_experiments.sh runs these lists. The stages, in order:
     classify     Model selection and test metrics for every dataset, method and dimension.
     cluster      k-means scores for every dataset, method and dimension, then the t-SNE and
                  UMAP figures and the preprocessing ablation of each dataset. Not timed.
+    stability-embeddings
+                 Perturbed copies of the stability datasets (emb3.perturb), then their
+                 Graph2Vec and FGSD embeddings and WL kernels. Not timed.
+    stability-gin
+                 GIN on every fold of every perturbed copy, and fold 0 of the original
+                 data with the second seed of the stability pair. Not timed, may run in parallel.
+    stability    Neighbourhood overlap and accuracy change per dataset and method.
 
 Jobs that are already done are skipped by the commands themselves, so a list can always
 be run again after an interruption.
@@ -26,7 +33,8 @@ from typing import Any, Dict, List, Optional
 from emb3.classify import METHODS, candidates
 from emb3.config import load_config
 
-STAGES = ("embeddings", "gin-timed", "gin", "classify", "cluster")
+STAGES = ("embeddings", "gin-timed", "gin", "classify", "cluster", "stability-embeddings", "stability-gin", "stability")
+PARALLEL_STAGES = ("gin", "stability-gin")
 TIMED_STAGES = ("embeddings", "gin-timed")
 
 
@@ -109,7 +117,41 @@ def jobs(
             if stage == "cluster":
                 add("main", "emb3.visualize", dataset=dataset)
                 add("main", "emb3.cluster_ablation", dataset=dataset)
+        elif stage.startswith("stability") and dataset in config["stability"]["datasets"]:
+            _stability_jobs(config, stage, dataset, methods, add)
     return planned
+
+
+def _stability_jobs(config: Dict[str, Any], stage: str, dataset: str, methods: List[str], add: Any) -> None:
+    from emb3.perturb import variants
+
+    spec = config["cross_validation"][config["datasets"][dataset]["size"]]
+    dimension = config["stability"]["dimension"]
+    names = [name for name, _, _ in variants(config)]
+    reference = {method: candidates(config, method, dataset)[0] for method in METHODS}
+    if stage == "stability-embeddings":
+        add("main", "emb3.perturb", dataset=dataset)
+        for variant in names:
+            for method in ("graph2vec", "fgsd"):
+                if method in methods:
+                    for seed in range(spec["repeats"]):   # repeat r uses embedding seed r
+                        add("karateclub", "emb3.embed", method=method, dataset=dataset, setting=reference[method]["embedding"],
+                            dimension=dimension, seed=seed, variant=variant)
+            if "wl_kernel" in methods:
+                add("main", "emb3.embed", method="wl_kernel", dataset=dataset, setting=reference["wl_kernel"]["embedding"],
+                    run=0, variant=variant)
+    elif stage == "stability-gin" and "gin" in methods:
+        setting = reference["gin"]["setting"]
+        second = config["seeds"]["stability_pair"][1]
+        add("main", "emb3.train_gin", dataset=dataset, dimension=dimension, setting=setting, repeat=0, fold=0, seed=second)
+        for variant in names:
+            for repeat in range(spec["repeats"]):
+                for fold in range(spec["folds"]):
+                    add("main", "emb3.train_gin", dataset=dataset, dimension=dimension, setting=setting,
+                        repeat=repeat, fold=fold, variant=variant)
+    elif stage == "stability":
+        for method in methods:
+            add("main", "emb3.stability", dataset=dataset, method=method)
 
 
 def main(argv: Optional[list] = None) -> None:
