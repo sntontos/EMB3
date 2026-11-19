@@ -18,6 +18,10 @@ deterministic FGSD and WL kernel). The other columns: original against the pertu
 | ENZYMES | FGSD | 1.000 | 0.142 | 0.098 | 0.258 | 0.112 | 0.0084 |
 | ENZYMES | GIN | 0.227 | 0.169 | 0.120 | 0.177 | 0.122 | 0.0084 |
 | ENZYMES | WL kernel | 1.000 | 0.544 | 0.350 | 0.534 | 0.330 | 0.0084 |
+| REDDIT-MULTI-12K | Graph2Vec | 0.307 | 0.167 | 0.101 | 0.081 | 0.031 | 0.0004 |
+| REDDIT-MULTI-12K | FGSD | 1.000 | 0.092 | 0.032 | 0.073 | 0.023 | 0.0004 |
+| REDDIT-MULTI-12K | GIN | 0.146 | 0.068 | 0.086 | 0.068 | 0.063 | 0.0004 |
+| REDDIT-MULTI-12K | WL kernel | 1.000 | 0.642 | 0.423 | 0.487 | 0.369 | 0.0004 |
 
 ## Classification accuracy
 
@@ -33,3 +37,7 @@ perturbed copies; GIN keeps its reference setting, and the large dataset uses th
 | ENZYMES | FGSD | 30 | 0.319 ± 0.060 | -5.2 ± 8.1 | -8.3 ± 7.3 | -4.4 ± 5.3 | -6.7 ± 6.5 |
 | ENZYMES | GIN | 30 | 0.432 ± 0.074 | -2.7 ± 8.7 | -7.3 ± 8.6 | -3.1 ± 8.2 | -8.8 ± 8.9 |
 | ENZYMES | WL kernel | 30 | 0.496 ± 0.055 | -13.1 ± 8.1 | -21.1 ± 7.0 | -12.8 ± 8.5 | -23.3 ± 7.4 |
+| REDDIT-MULTI-12K | Graph2Vec | 5 | 0.442 ± 0.006 | -0.5 ± 0.7 | -1.3 ± 1.1 | +0.1 ± 0.7 | +0.6 ± 0.9 |
+| REDDIT-MULTI-12K | FGSD | 5 | 0.313 ± 0.002 | -1.8 ± 0.4 | -4.5 ± 0.4 | +2.1 ± 0.7 | +2.2 ± 1.2 |
+| REDDIT-MULTI-12K | GIN | 5 | 0.361 ± 0.047 | -10.5 ± 9.5 | -5.0 ± 8.5 | -9.3 ± 7.7 | -11.9 ± 4.1 |
+| REDDIT-MULTI-12K | WL kernel | 5 | 0.358 ± 0.007 | -0.2 ± 0.3 | -0.6 ± 0.2 | -0.4 ± 0.4 | -1.0 ± 0.3 |
